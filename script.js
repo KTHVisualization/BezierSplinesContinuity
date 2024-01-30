@@ -8,27 +8,63 @@ const canvasModes = ["draw", "move"];
 let CANVASMODE = canvasModes[0];
 let POINT_INDEX = -1;
 
+const plotLayout = {
+	showlegend: false,
+  xaxis: { showticklabels: false },
+  yaxis: { showticklabels: false },
+  autosize: true,
+  margin: {
+  l: 10,
+  r: 10,
+  b: 10,
+  t: 50,
+  pad: 4
+},
+}
+
+const plotConfig = {
+	responsive: true,
+	modeBarButtonsToRemove: ['hoverClosestCartesian', 'hoverCompareCartesian', 'toggleSpikelines'],
+	toImageButtonOptions: {
+    format: 'svg', // one of png, svg, jpeg, webp
+  }
+}
+
 const velocityData = [];
 const velocityLayout = {
+	...plotLayout,
 	title: "Velocity"
 }
 
 const accelerationData = [];
 const accelerationLayout = {
+	...plotLayout,
 	title: "Acceleration"
 }
 
 function init_view(){
-	document.getElementById("plotCanvas").height=450;
-	document.getElementById("plotCanvas").width=450;
+  // Resize canvas when window is resized.
+  window.addEventListener('resize', resizeCanvas);
+  // Set canvas size for the first time.
+  resizeCanvas();
 
 	document.getElementById("broken").style.background = "#0da2f7";
 	document.getElementById("aligned").style.background = "initial";
 	document.getElementById("mirrored").style.background = "initial";
 
-	Plotly.newPlot("velocityPlot", velocityData, velocityLayout);
-	Plotly.newPlot("accelerationPlot", accelerationData, accelerationLayout);
+	Plotly.newPlot("velocityPlot", velocityData, velocityLayout, plotConfig);
+	Plotly.newPlot("accelerationPlot", accelerationData, accelerationLayout, plotConfig);
 }
+
+// Runs each time the DOM window resize event fires.
+function resizeCanvas() {
+	plotCanvas = document.getElementById("plotCanvas");
+	plotCanvasContainer = document.getElementById("plotCanvasContainer");
+  plotCanvas.width = plotCanvasContainer.clientWidth;
+  plotCanvas.height = plotCanvasContainer.clientHeight;
+  draw_tangents();
+}
+
 
 /*
 BUTTON CALLBACKS
@@ -181,6 +217,7 @@ function getPoint(event) {
 	l = canvasPoints.length;
 	if(l >= 4 && (l-1) % 3 == 0) {
 		//TODO: match trace color to curve
+		// TODO: get colors from ColorBrewer
 		var color = 'rgb(' + Math.floor(Math.random() * 256).toString() + ', ' + Math.floor(Math.random() * 256).toString() + ', ' + Math.floor(Math.random() * 256).toString() + ')';
 		canvasPoint_Colors.push(color, color, color, color);
 		brokenContinuity();
@@ -261,7 +298,7 @@ function draw_velocity() {
 			}
 		};
 		velocityData.push(data);
-		Plotly.newPlot("velocityPlot", velocityData, velocityLayout);
+		Plotly.newPlot("velocityPlot", velocityData, velocityLayout, plotConfig);
 	}
 }
 
@@ -287,7 +324,7 @@ function draw_acceleration() {
 			}
 		};
 		accelerationData.push(data);
-		Plotly.newPlot("accelerationPlot", accelerationData, accelerationLayout);
+		Plotly.newPlot("accelerationPlot", accelerationData, accelerationLayout, plotConfig);
 	}
 }
 

@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html>
 <head>
 	<link rel="stylesheet" type="text/css" href="style.css">
@@ -8,26 +8,39 @@
 </head>
 
 <body>
-<h1>Bézier Splines</h1>
 
 <div class="grid-container">
-	<canvas 
-		id="plotCanvas" 
-		class=main-plot 
-		onclick="getPoint(event)"
-		>
-	</canvas>
-  	<button 
-  		class="clear-canvas"
-  		onclick="resetCanvas()">
-  		clear
-  	</button>  
-	<button
-		id="canvas-mode"
-		class="canvas-mode"
-		onclick="switchCanvasMode()">
-		switch to moving points
-	</button>
+
+	<h1 id="pagename">Bézier Splines: Continuity</h1>
+	<p id="pagedescription">
+		Created by Jule Schmidt for the course DH2320 / DD2258 at KTH in 2023.
+		Inspired by the visualizations in Freya Holmér's video <a href="https://www.youtube.com/watch?v=jvPPXbo87ds">The Continuity of Splines</a>.
+		Small modifications by <a href="http://tinoweinkauf.net">Tino Weinkauf</a>.
+	</p>
+
+	<div id="plotCanvasContainer" class="main-plot-container">
+		<canvas 
+			id="plotCanvas" 
+			class="main-plot"
+			onclick="getPoint(event)"
+			>
+		</canvas>
+	</div>
+
+	<div class="canvas-buttons">
+		<button 
+	  		class="clear-canvas"
+	  		onclick="resetCanvas()">
+	  		clear
+	  	</button>  
+		<button
+			id="canvas-mode"
+			class="canvas-mode"
+			onclick="switchCanvasMode()">
+			switch to moving points
+		</button>
+	</div>
+
   	<div 
 		class="velocity"
 		id="velocityPlot"
@@ -57,10 +70,10 @@
   	</div>
 </div>
 
+</body>
+
 <script type="text/javascript">
 	init_view();
 </script>
 
-
-</body>
 </html>

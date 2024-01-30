@@ -1,63 +1,87 @@
-.grid-container {
-	display: grid;
-	grid-template-columns: auto auto auto auto;
-	grid-gap: 10px;
+body {
+	overflow: hidden;
+	padding: 0px;
+	margin: 0px;
 }
 
-.grid-container > div {
+.grid-container {
+	display: grid;
+	grid-template-columns: 1fr 2fr;
+	grid-template-rows: 1fr 1fr 10fr 10fr;
+	gap: 10px;
+	width: 100vw;
+	height: 100vh;
+	margin: 0px;
+	padding: 0px;
+}
+
+.grid-container > div, h1 {
 	text-align: center;
 }
 
-/*plots*/
+/* Header */
 
-.main-plot{
-	grid-column-start: 2;
-	grid-column-end: 4;
-	grid-row-start: 2;
-	grid-row-end: 4;
-	border: 1px solid black;
-
+#pagename {
+	grid-column: 1;
+	grid-row: 1;
+	text-align: center;
 }
+
+#pagedescription {
+	grid-column: 2;
+	grid-row: 1;
+	padding-left: 10%;
+	padding-right: 10%;
+}
+
+
+/* Plots */
+
+.main-plot-container{
+	grid-column: 2;
+	grid-row: 3 / span 2;
+	border: 1px solid black;
+	margin-right: 4px;
+	margin-bottom: 4px;
+}
+
 
 .velocity{
 	grid-column: 1;
-	grid-row: 2;
-	width: 350px;
-	height: 350px;
+	grid-row: 3;
+	border: 1px solid black;
+	margin-left: 4px;
 }
 
-.plot{
-	width: 100%;
-	border: 1px solid black;
-	height: 85%;
-}
 
 .acceleration{
 	grid-column: 1;
-	grid-row: 3;
-	width: 350px;
-	height: 350px;
+	grid-row: 4;
+	border: 1px solid black;
+	margin-left: 4px;
+	margin-bottom: 4px;
 }
 
 /*buttons and more*/
 
-.clear-canvas{
+.canvas-buttons {
+	display: flex;
+	justify-content: space-evenly;
 	grid-column: 2;
-	grid-row: 1;
+	grid-row: 2;
 }
 
-.canvas-mode {
-	grid-column: 3;
-	grid-row: 1;
+.canvas-buttons > button {
+	width: 48%;
 }
 
 .continuity-modes {
 	display: flex;
 	justify-content: space-evenly;
 	grid-column: 1;
-	grid-row: 1;
+	grid-row: 2;
 }
 
 .continuity-modes > button {
-	width: 33%;
+	width: 31%;
 }
