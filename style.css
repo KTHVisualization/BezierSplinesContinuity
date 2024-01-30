@@ -23,7 +23,7 @@ body {
 
 #pagename {
 	grid-column: 1;
-	grid-row: 1;
+	grid-row: 1 / span 2;
 	text-align: center;
 }
 
@@ -64,24 +64,17 @@ body {
 
 /*buttons and more*/
 
-.canvas-buttons {
+.buttonArea {
 	display: flex;
 	justify-content: space-evenly;
 	grid-column: 2;
 	grid-row: 2;
 }
 
-.canvas-buttons > button {
-	width: 48%;
+.buttonArea > button {
+	width: 20%;
 }
 
-.continuity-modes {
-	display: flex;
-	justify-content: space-evenly;
-	grid-column: 1;
-	grid-row: 2;
-}
-
-.continuity-modes > button {
-	width: 31%;
+.buttonArea > .clear-canvas {
+	margin-left: 10%;
 }

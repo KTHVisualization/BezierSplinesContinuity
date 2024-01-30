@@ -1,12 +1,11 @@
 const canvasPoints = [];
-const canvasPoint_Colors = [];
+const Colors = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00'];
 
 const modes = ["BROKEN", "ALIGN", "MIRROR"];
 let MODE = modes[0];
 
-const canvasModes = ["draw", "move"];
-let CANVASMODE = canvasModes[0];
-let POINT_INDEX = -1;
+let MovingPointIdx = -1;
+let EatTheNextClick = false;
 
 const plotLayout = {
 	showlegend: false,
@@ -48,6 +47,13 @@ function init_view(){
   // Set canvas size for the first time.
   resizeCanvas();
 
+  // Register events for moving points
+	plotCanvas = document.getElementById("plotCanvas");
+	plotCanvas.addEventListener("mousedown", canvasMouseDown);
+	plotCanvas.addEventListener("mousemove", canvasMouseMove);
+	plotCanvas.addEventListener("mouseup", canvasMouseUp);
+	plotCanvas.addEventListener("click", canvasClick);
+
 	document.getElementById("broken").style.background = "#0da2f7";
 	document.getElementById("aligned").style.background = "initial";
 	document.getElementById("mirrored").style.background = "initial";
@@ -66,30 +72,127 @@ function resizeCanvas() {
 }
 
 
+function GetNearestPointIdx(x, y)
+{
+	//Find closest distance to any moveable point
+	let MinDistance = 1000000;
+	let MinPIdx = -1;
+  for (var i = 0; i < canvasPoints.length; i++)
+  {
+    var cvPt = canvasPoints[i];
+    var distance = Math.sqrt(Math.pow(cvPt[0] - x, 2) + Math.pow(cvPt[1] - y, 2));
+    if (distance < MinDistance)
+  	{
+  		MinDistance = distance;
+  		MinPIdx = i;
+  	}
+  }
+
+  //Are we rather close?
+  let DistanceThreshold = 10
+  if (MinDistance <= DistanceThreshold)
+  {
+  	//We found a close point
+  	return MinPIdx;
+  }
+
+  //We did not find something nearby
+  return -1;
+}
+
+
+function canvasMouseDown(event)
+{
+	//Get the canvas and where we pressed the mouse button
+	var cv = document.getElementById("plotCanvas");
+	let x = event.clientX - cv.getBoundingClientRect().left;
+	let y = event.clientY - cv.getBoundingClientRect().top;
+
+	//If close to an existing point, then we move that point, else we add a new point.
+
+	//Find closest distance to any moveable point
+	NearestPointIdx = GetNearestPointIdx(x, y);
+	if (NearestPointIdx >= 0 && !event.ctrlKey)
+	{
+  	//We found a point to move
+  	MovingPointIdx = NearestPointIdx;
+		EatTheNextClick = true;
+  }
+  else
+  {
+  	MovingPointIdx = -1;
+  	//We will add the new point during the click event as it is standard on all GUIs.
+  }
+}
+
+function canvasMouseMove()
+{
+	if (MovingPointIdx >= 0 && MovingPointIdx < canvasPoints.length)
+	{
+		//Move point to current cursor
+	  var cv = document.getElementById("plotCanvas");
+	  let x = event.clientX - cv.getBoundingClientRect().left;
+	  let y = event.clientY - cv.getBoundingClientRect().top;
+	  canvasPoints[MovingPointIdx] = [x, y];
+
+	  // check according to continuity mode
+	  // if broken, can just move the one point, same if first or last two points
+	  if (MODE == "ALIGN" && MovingPointIdx > 1 && MovingPointIdx < canvasPoints.length - 2)
+	  {
+	    calc_aligned_tangents();
+	  }
+	  else if (MODE == "MIRROR" && MovingPointIdx > 1 && MovingPointIdx < canvasPoints.length - 2)
+	  {
+	    calc_mirrored_tangents();
+	  }
+
+	  draw_tangents();
+	  updatePlots();
+	}	
+}
+
+function canvasMouseUp()
+{
+	MovingPointIdx = -1;	
+}
+
+function canvasClick(event)
+{
+	//If we are not moving a point, we add one.
+	if (EatTheNextClick)
+	{
+		EatTheNextClick = false;
+		return;
+	}
+
+	//Get the canvas and where we pressed the mouse button
+	var cv = document.getElementById("plotCanvas");
+	let x = event.clientX - cv.getBoundingClientRect().left;
+	let y = event.clientY - cv.getBoundingClientRect().top;
+
+	if (event.ctrlKey)
+	{
+		//Try removing a point
+		PIdx = GetNearestPointIdx(x, y);
+		if (PIdx >= 0)
+		{
+			canvasPoints.splice(PIdx, 1)
+		}
+	}
+	else
+	{
+		//store point in list for bézier curve
+		canvasPoints.push([x, y]);
+	}
+
+	draw_tangents();
+	updatePlots();	
+}
+
 /*
 BUTTON CALLBACKS
 */
 
-/*switch between drawing and moving points */
-function switchCanvasMode() {
-	var b = document.getElementById("canvas-mode");
-	var cv = document.getElementById("plotCanvas");
-	if (CANVASMODE == "draw") {
-		CANVASMODE = canvasModes[1];
-		// change canvas on click to moving points
-		cv.onclick = findPoint;
-		cv.onmousemove = movePoint;
-		// change button text
-		b.textContent = "switch to adding points";
-	} else if (CANVASMODE == "move") {
-		CANVASMODE = canvasModes[0];
-		// change canvas on click to drawing points
-		cv.onclick = getPoint;
-		cv.onmousemove = '';
-		// change button text
-		b.textContent = "switch to moving points";
-	}
-}
 
 /*clear canvas button*/
 function resetCanvas() {
@@ -109,8 +212,8 @@ function clearCanvas() {
 	ctx.clearRect(0, 0, cv.width, cv.height);
 
 	// empty the velocity and acceleration plots
-	Plotly.plot("velocityPlot", [], velocityLayout);
-	Plotly.plot("accelerationPlot", [], accelerationLayout);
+	Plotly.plot("velocityPlot", [], velocityLayout, plotConfig);
+	Plotly.plot("accelerationPlot", [], accelerationLayout, plotConfig);
 }
 
 /*broken continuity button*/
@@ -145,86 +248,6 @@ function mirrorContinuity() {
 	updatePlots();
 }
 
-/*
-CANVAS INTERACTION
-*/
-
-/*on mouse down event*/
-function findPoint(event) {
-	var cv = document.getElementById("plotCanvas");
-	let x = event.clientX - cv.getBoundingClientRect().left;
-	let y = event.clientY - cv.getBoundingClientRect().top;
-
-	if (POINT_INDEX < 0) {
-		// if not currently moving a point: try to find point to move
-		for(var i = 0; i < canvasPoints.length; i++) {
-			var cvPt = canvasPoints[i];
-			if (cvPt[0] <= (x+5) && cvPt[0] >= (x-5)
-				&& cvPt[1] <= (y+5) && cvPt[1] >= (y-5)) {
-				POINT_INDEX = i;
-				break;
-			}
-		}
-	}
-	else {
-		// currently moving a point, let point go
-		POINT_INDEX = -1;
-	}
-
-}
-
-/*on mouse move event*/
-function movePoint(event) {
-	if (POINT_INDEX >= 0) {
-		// found a point that can be moved
-		var cv = document.getElementById("plotCanvas");
-		let x = event.clientX - cv.getBoundingClientRect().left;
-		let y = event.clientY - cv.getBoundingClientRect().top;
-		canvasPoints[POINT_INDEX] = [x, y];
-
-		// check according to continuity mode
-		// if broken, can just move the one point, same if first or last two points
-		if (MODE == "ALIGN" && POINT_INDEX > 1 && POINT_INDEX < canvasPoints.length - 2) {
-			calc_aligned_tangents();
-
-		} else if (MODE == "MIRROR" && POINT_INDEX > 1 && POINT_INDEX < canvasPoints.length -2) {
-			calc_mirrored_tangents();
-		}
-
-		// redraw canvas points and Bézier curves
-		draw_tangents();
-		// update velocity and acceleration points
-		updatePlots();
-	}
-}
-
-/*on click event*/
-function getPoint(event) {
-	/* 
-	add a new point and draw it as well as the bézier curve
-	*/
-	var cv = document.getElementById("plotCanvas");
-	var ctx = cv.getContext("2d");
-
-	let x = event.clientX - cv.getBoundingClientRect().left;
-	let y = event.clientY - cv.getBoundingClientRect().top;
-
-	//store point in list for bézier curve
-	canvasPoints.push([x,y]);
-
-	drawPoint(ctx, x, y);
-	// if enough points: draw bezier curve
-	l = canvasPoints.length;
-	if(l >= 4 && (l-1) % 3 == 0) {
-		//TODO: match trace color to curve
-		// TODO: get colors from ColorBrewer
-		var color = 'rgb(' + Math.floor(Math.random() * 256).toString() + ', ' + Math.floor(Math.random() * 256).toString() + ', ' + Math.floor(Math.random() * 256).toString() + ')';
-		canvasPoint_Colors.push(color, color, color, color);
-		brokenContinuity();
-		draw_bezier_curve(ctx, canvasPoints[l-2], canvasPoints[l-3], canvasPoints[l-4], canvasPoints[l-1], l-1);
-		updatePlots();
-	}
-}
 
 function drawPoint(ctx, x, y) {
 	//draw a point onto the canvas
@@ -233,53 +256,60 @@ function drawPoint(ctx, x, y) {
 	ctx.stroke();
 }
 
-/*
-DRAWING FUNCTIONS
-*/
+function draw_bezier_curve(ctx, pt1, pt2, pt3, pt4, BezierIdx) {
+	//draw curve
+	ctx.lineWidth = 3;
+	ctx.strokeStyle = Colors[BezierIdx % Colors.length];
+	ctx.beginPath();
+	ctx.moveTo(pt1[0], pt1[1]);
+	ctx.bezierCurveTo(pt2[0], pt2[1], pt3[0], pt3[1], pt4[0], pt4[1]);
+	ctx.stroke();
+
+	//draw handles
+	ctx.strokeStyle = '#000000';
+	ctx.lineWidth = 1;
+	ctx.beginPath();
+	ctx.moveTo(pt1[0], pt1[1]);
+	ctx.lineTo(pt2[0], pt2[1]);
+	ctx.moveTo(pt4[0], pt4[1]);
+	ctx.lineTo(pt3[0], pt3[1]);
+	ctx.stroke();
+}
+
+function draw_tangents()
+{
+	clearCanvas();
+
+	var cv = document.getElementById("plotCanvas");
+	var ctx = cv.getContext("2d");
+
+	for (var i = 0; i < canvasPoints.length; i++)
+	{
+		drawPoint(ctx, canvasPoints[i][0], canvasPoints[i][1]);
+
+		if (i >= 3 && i % 3 == 0)
+		{
+			//        i = 3, 6, 9, 12, 15, ...
+			//BezierIdx = 0, 1, 2,  3,  4, ...
+			const BezierIdx = (i-3) / 3;
+
+			draw_bezier_curve(ctx, canvasPoints[i-3], canvasPoints[i-2],
+														 canvasPoints[i-1], canvasPoints[i],
+														 BezierIdx);
+		}
+	}
+}
+
 
 function updatePlots() {
 	draw_velocity();
 	draw_acceleration();
 }
 
-function draw_bezier_curve(ctx, pt1, pt2, pt3, pt4, index) {
-	//draw curve
-	ctx.lineWidth = 3;
-	ctx.moveTo(pt4[0], pt4[1]);
-	ctx.strokeStyle = canvasPoint_Colors[index];
-	ctx.bezierCurveTo(pt1[0], pt1[1], pt2[0], pt2[1], pt3[0], pt3[1]);
-	ctx.stroke();
-
-	//draw splines
-	ctx.strokeStyle = '#000000';
-	ctx.lineWidth = 1;
-	ctx.lineTo(pt2[0], pt2[1]);
-
-	ctx.moveTo(pt4[0], pt4[1]);
-	ctx.lineTo(pt1[0], pt1[1]);
-
-	ctx.stroke();
-}
-
-function draw_tangents() {
-	clearCanvas();
-
-	var cv = document.getElementById("plotCanvas");
-	var ctx = cv.getContext("2d");
-
-	for (var i = 0; i < canvasPoints.length; i++) {
-		drawPoint(ctx, canvasPoints[i][0], canvasPoints[i][1]);
-		if (i >= 3 && i % 3 == 0) {
-			draw_bezier_curve(ctx, canvasPoints[i-1], canvasPoints[i-2], canvasPoints[i-3], canvasPoints[i], i);
-		}
-	}
-
-}
-
 function draw_velocity() {
 	/*updates the velocity plot based on calc_velocity*/
 	velocityData.length = 0;
-	for (var i = 3; i <= canvasPoints.length; i+=3) {
+	for (var i = 3; i < canvasPoints.length; i+=3) {
 		var b = [canvasPoints[i-3], canvasPoints[i-2], canvasPoints[i-1], canvasPoints[i]];
 		var velocity = get_velocity_points(b, 3);
 		var xData = [];
@@ -288,13 +318,17 @@ function draw_velocity() {
 			xData.push(velocity[j][0]);
 			yData.push(velocity[j][1]);
 		}
+
+		//        i = 3, 6, 9, 12, 15, ...
+		//BezierIdx = 0, 1, 2,  3,  4, ...
+		const BezierIdx = (i-3) / 3;
 			
 		var data = {
 			x: xData,
 			y: yData,
 			mode:"lines",
 			line: {
-				color: canvasPoint_Colors[i]
+				color: Colors[BezierIdx % Colors.length]
 			}
 		};
 		velocityData.push(data);
@@ -305,7 +339,7 @@ function draw_velocity() {
 function draw_acceleration() {
 	/*updates the acceleration plot based on calc_acceleration*/
 	accelerationData.length = 0;
-	for (var i = 3; i <= canvasPoints.length; i+=3) {
+	for (var i = 3; i < canvasPoints.length; i+=3) {
 		var b = [canvasPoints[i-3], canvasPoints[i-2], canvasPoints[i-1], canvasPoints[i]];
 		var acceleration = get_acceleration_points(b, 3);
 		var xData = [];
@@ -315,12 +349,16 @@ function draw_acceleration() {
 			yData.push(acceleration[j][1]);
 		}
 
+		//        i = 3, 6, 9, 12, 15, ...
+		//BezierIdx = 0, 1, 2,  3,  4, ...
+		const BezierIdx = (i-3) / 3;
+			
 		var data = {
 			x: xData,
 			y: yData,
 			mode: "lines",
 			line: {
-				color: canvasPoint_Colors[i]
+				color: Colors[BezierIdx % Colors.length]
 			}
 		};
 		accelerationData.push(data);

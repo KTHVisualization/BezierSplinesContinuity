@@ -22,23 +22,31 @@
 		<canvas 
 			id="plotCanvas" 
 			class="main-plot"
-			onclick="getPoint(event)"
 			>
 		</canvas>
 	</div>
 
-	<div class="canvas-buttons">
+	<div class="buttonArea">
 		<button 
-	  		class="clear-canvas"
-	  		onclick="resetCanvas()">
-	  		clear
-	  	</button>  
-		<button
-			id="canvas-mode"
-			class="canvas-mode"
-			onclick="switchCanvasMode()">
-			switch to moving points
+			id="broken"
+			onclick="brokenContinuity()">
+			broken
 		</button>
+		<button 
+			id="aligned"
+			onclick="alignContinuity()">
+			align
+		</button>
+		<button 
+			id="mirrored"
+			onclick="mirrorContinuity()">
+			mirror
+		</button>
+
+		<button class="clear-canvas" onclick="resetCanvas()">
+	  		Clear all Curves
+  	</button>
+
 	</div>
 
   	<div 
@@ -51,23 +59,7 @@
 		id="accelerationPlot"
 		>
   	</div>
-  	<div class="continuity-modes">
-  		<button 
-  			id="broken"
-  			onclick="brokenContinuity()">
-  			broken
-  		</button>
-  		<button 
-  			id="aligned"
-  			onclick="alignContinuity()">
-  			align
-  		</button>
-  		<button 
-  			id="mirrored"
-  			onclick="mirrorContinuity()">
-  			mirror
-  		</button>
-  	</div>
+
 </div>
 
 </body>
