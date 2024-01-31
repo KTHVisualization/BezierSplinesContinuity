@@ -10,8 +10,8 @@ let EatTheNextClick = false;
 const plotLayout = {
 	showlegend: false,
 	hovermode: false,
-  xaxis: { showticklabels: false },
-  yaxis: { showticklabels: false },
+  xaxis: { showticklabels: false, autorange: true },
+  yaxis: { showticklabels: false, autorange: true },
   autosize: true,
   margin: {
   l: 10,
@@ -30,13 +30,11 @@ const plotConfig = {
   }
 }
 
-const velocityData = [];
 const velocityLayout = {
 	...plotLayout,
 	title: "Velocity"
 }
 
-const accelerationData = [];
 const accelerationLayout = {
 	...plotLayout,
 	title: "Acceleration"
@@ -59,8 +57,8 @@ function init_view(){
 	document.getElementById("aligned").style.background = "initial";
 	document.getElementById("mirrored").style.background = "initial";
 
-	Plotly.newPlot("velocityPlot", velocityData, velocityLayout, plotConfig);
-	Plotly.newPlot("accelerationPlot", accelerationData, accelerationLayout, plotConfig);
+	Plotly.newPlot("velocityPlot", [], velocityLayout, plotConfig);
+	Plotly.newPlot("accelerationPlot", [], accelerationLayout, plotConfig);
 }
 
 // Runs each time the DOM window resize event fires.
@@ -202,8 +200,6 @@ BUTTON CALLBACKS
 function resetCanvas() {
 	//empty the points array
 	canvasPoints.length = 0;
-	velocityData.length = 0;
-	accelerationData.length = 0;
 
 	// remove all drawings
 	clearCanvas();
@@ -216,8 +212,8 @@ function clearCanvas() {
 	ctx.clearRect(0, 0, cv.width, cv.height);
 
 	// empty the velocity and acceleration plots
-	Plotly.plot("velocityPlot", [], velocityLayout, plotConfig);
-	Plotly.plot("accelerationPlot", [], accelerationLayout, plotConfig);
+	Plotly.newPlot("velocityPlot", [], velocityLayout, plotConfig);
+	Plotly.newPlot("accelerationPlot", [], accelerationLayout, plotConfig);
 }
 
 /*broken continuity button*/
@@ -306,70 +302,103 @@ function draw_tangents()
 }
 
 
-function updatePlots() {
-	draw_velocity();
-	draw_acceleration();
+function updatePlots()
+{
+	[Velocity, Acceleration] = ComputeDerivatives();
+	DrawVelocity(Velocity);
+	DrawAcceleration(Acceleration);
 }
 
-function draw_velocity() {
-	/*updates the velocity plot based on calc_velocity*/
-	velocityData.length = 0;
-	for (var i = 3; i < canvasPoints.length; i+=3) {
-		var b = [canvasPoints[i-3], canvasPoints[i-2], canvasPoints[i-1], canvasPoints[i]];
-		var velocity = get_velocity_points(b, 3);
-		var xData = [];
-		var yData = [];
-		for (var j = 0; j < velocity.length; j++) {
-			xData.push(velocity[j][0]);
-			yData.push(velocity[j][1]);
-		}
+function ComputeDerivatives()
+{
+	FirstDerivatives = [];
+	SecondDerivatives = [];
+  for (var i = 3; i < canvasPoints.length; i += 3)
+  {
+    //        i = 3, 6, 9, 12, 15, ...
+    //BezierIdx = 0, 1, 2,  3,  4, ...
+    const BezierIdx = (i - 3) / 3;
 
-		//        i = 3, 6, 9, 12, 15, ...
-		//BezierIdx = 0, 1, 2,  3,  4, ...
-		const BezierIdx = (i-3) / 3;
-			
-		var data = {
-			x: xData,
-			y: yData,
-			mode:"lines",
-			line: {
-				color: Colors[BezierIdx % Colors.length]
-			}
-		};
-		velocityData.push(data);
-		Plotly.newPlot("velocityPlot", velocityData, velocityLayout, plotConfig);
-	}
+    const FD = GetFirstDerivative(BezierIdx);
+    if (FD.length != 3) break;
+    FirstDerivatives.push(FD);
+
+    const SD = GetSecondDerivative(FD);
+    if (SD.length != 2) break;
+    SecondDerivatives.push(SD);
+  }
+
+  return [FirstDerivatives, SecondDerivatives];
 }
 
-function draw_acceleration() {
-	/*updates the acceleration plot based on calc_acceleration*/
-	accelerationData.length = 0;
-	for (var i = 3; i < canvasPoints.length; i+=3) {
-		var b = [canvasPoints[i-3], canvasPoints[i-2], canvasPoints[i-1], canvasPoints[i]];
-		var acceleration = get_acceleration_points(b, 3);
-		var xData = [];
-		var yData = [];
-		for (var j = 0; j < acceleration.length; j ++) {
-			xData.push(acceleration[j][0]);
-			yData.push(acceleration[j][1]);
-		}
+function DrawVelocity(Velocity)
+{
+	// The first derivative is a quadratic Bezier curve
+	// We use Plotly's ability to draw them directly.
+	// We need to add the control points (DerivativePoints) of that curve as well,
+	// so that Plotly scales nicely to the content.
 
-		//        i = 3, 6, 9, 12, 15, ...
-		//BezierIdx = 0, 1, 2,  3,  4, ...
-		const BezierIdx = (i-3) / 3;
-			
-		var data = {
-			x: xData,
-			y: yData,
-			mode: "lines",
-			line: {
-				color: Colors[BezierIdx % Colors.length]
-			}
-		};
-		accelerationData.push(data);
-		Plotly.newPlot("accelerationPlot", accelerationData, accelerationLayout, plotConfig);
-	}
+	velocityPoints = [];
+	velocityShapes = [];
+  for (var i = 0; i < Velocity.length; i++)
+  {
+  	const D = Velocity[i];
+    var DerivativePoints =
+    {
+      x: [D[0][0], D[1][0], D[2][0]],
+      y: [D[0][1], D[1][1], D[2][1]],
+      mode: "markers",
+      marker:
+      {
+      	color: 'rgba(0,0,0,0)', //We hide them.
+        size: 1
+      }
+    };
+
+    velocityPoints.push(DerivativePoints);
+
+    var DerivativeBezier =
+    {
+      type: 'path',
+      path: `M ${D[0][0]},${D[0][1]} Q ${D[1][0]},${D[1][1]} ${D[2][0]},${D[2][1]}`,
+      line:
+      {
+        color: Colors[i % Colors.length],
+        width: 3
+      }
+    };
+
+    velocityShapes.push(DerivativeBezier);
+  }
+
+  Plotly.newPlot("velocityPlot", velocityPoints, {...velocityLayout, shapes: velocityShapes}, plotConfig);
 }
+
+
+function DrawAcceleration(Acceleration)
+{
+	accelerationPoints = [];
+  for (var i = 0; i < Acceleration.length; i++)
+  {
+  	const A = Acceleration[i];
+    var AccData =
+    {
+      x: [A[0][0], A[1][0]],
+      y: [A[0][1], A[1][1]],
+      mode: "lines",
+      line:
+      {
+        color: Colors[i % Colors.length],
+        width: 3
+      }
+    };
+
+    accelerationPoints.push(AccData);
+  }
+
+  Plotly.newPlot("accelerationPlot", accelerationPoints, accelerationLayout, plotConfig);
+}
+
 
 /*
 CALCULATIONS
@@ -443,48 +472,44 @@ function CalcContinuityAll()
   }
 }
 
+function GetFirstDerivative(BezierIdx)
+{
+	const a = BezierIdx * 3;
+	const b = a + 1;
+	const c = b + 1;
+	const d = c + 1;
 
-function get_velocity_points(b, n) {
-	/*Return the points to draw a velocity plot*/
-	var data = [];
-	for (var t = 0; t <= 1.01; t += 0.01) {
-		//xData.push(t);
-		data.push(calc_velocity(b, t, n));
-	}
-	return data;
+	if (d >= canvasPoints.length) return [];
+
+	const A = canvasPoints[a];
+	const B = canvasPoints[b];
+	const C = canvasPoints[c];
+	const D = canvasPoints[d];
+
+	const dpoints = 
+	[
+		[3 * (B[0]-A[0]), 3 * (B[1]-A[1])],
+		[3 * (C[0]-B[0]), 3 * (C[1]-B[1])],
+		[3 * (D[0]-C[0]), 3 * (D[1]-C[1])]
+	];
+
+	return dpoints;
 }
 
-function calc_velocity(b, t, n) {
-	/*calculates the velocity of a cubic bézier curve (first derivative)*/
-	var l = b.length;
-	if (l == 2) {
-		return [n * (b[1][0] - b[0][0]), n * (b[1][1] - b[0][1])];
-	}
-	else {
-		var next_b = []
-		for (var i=1; i < l; i++) {
-			next_b.push([(1-t) * b[i-1][0] + t * b[i][0], (1-t) * b[i-1][1] + t * b[i][1]]);
-		}
-		return calc_velocity(next_b, t, n);
-	}
-}
+function GetSecondDerivative(dpoints)
+{
+	if (dpoints.length != 3) return [];
 
-function get_acceleration_points(b, n) {
-	var data = [];
-	for (var t = 0; t <= 1.01; t += 0.01) {
-		data.push(calc_acceleration(b, t, n));
-	}
-	return data;
-}
+	const A = dpoints[0];
+	const B = dpoints[1];
+	const C = dpoints[2];
 
-function calc_acceleration(b, t, n) {
-	/*calculates the acceleration of a bézier curve (2nd derivative)*/
-	if (b.length != 4) return [0, 0];
-	b_1 = []
-	for (var i = 1; i <= 3; i++) {
-		b_1.push([(1-t) * b[i-1][0] + t*b[i][0], (1-t) * b[i-1][1] + t*b[i][1]]);
-	}
-	x =[n * (n-1) * (b_1[2][0] - 2 * b_1[1][0] + b_1[0][0]), n * (n-1) * (b_1[2][1] - 2 * b_1[1][1] + b_1[0][1])];
-	return x;
+	const ddpoints = 
+	[
+		[2 * (B[0]-A[0]), 2 * (B[1]-A[1])],
+		[2 * (C[0]-B[0]), 2 * (C[1]-B[1])]
+	];
+
+	return ddpoints;
 }
 
