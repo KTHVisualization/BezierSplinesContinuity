@@ -9,6 +9,7 @@ let EatTheNextClick = false;
 
 const plotLayout = {
 	showlegend: false,
+	hovermode: false,
   xaxis: { showticklabels: false },
   yaxis: { showticklabels: false },
   autosize: true,
@@ -133,17 +134,20 @@ function canvasMouseMove()
 	  var cv = document.getElementById("plotCanvas");
 	  let x = event.clientX - cv.getBoundingClientRect().left;
 	  let y = event.clientY - cv.getBoundingClientRect().top;
-	  canvasPoints[MovingPointIdx] = [x, y];
 
-	  // check according to continuity mode
-	  // if broken, can just move the one point, same if first or last two points
-	  if (MODE == "ALIGN" && MovingPointIdx > 1 && MovingPointIdx < canvasPoints.length - 2)
+	  if (MovingPointIdx <= 1 || MovingPointIdx >= canvasPoints.length - 2)
 	  {
-	    calc_aligned_tangents();
+		  //We can always move the first and last 2 points.
+	  	canvasPoints[MovingPointIdx] = [x, y];
 	  }
-	  else if (MODE == "MIRROR" && MovingPointIdx > 1 && MovingPointIdx < canvasPoints.length - 2)
+	  else
 	  {
-	    calc_mirrored_tangents();
+	  	//Adjust neighboring points while moving
+	  	CurIdx = 3 * Math.trunc((MovingPointIdx + 1) / 3);
+	  	PreIdx = CurIdx - 1;
+	  	SucIdx = CurIdx + 1;
+	  	Reference = MovingPointIdx - PreIdx;
+	  	AlignPoints(PreIdx, CurIdx, SucIdx, Reference, [x, y]);
 	  }
 
 	  draw_tangents();
@@ -231,7 +235,7 @@ function alignContinuity() {
 	document.getElementById("aligned").style.background = "#0da2f7";
 	document.getElementById("mirrored").style.background = "initial";
 
-	calc_aligned_tangents();
+	CalcContinuityAll();
 	draw_tangents();
 	updatePlots();
 }
@@ -243,7 +247,7 @@ function mirrorContinuity() {
 	document.getElementById("aligned").style.background = "initial";
 	document.getElementById("mirrored").style.background = "#0da2f7";
 
-	calc_mirrored_tangents();
+	CalcContinuityAll();
 	draw_tangents();
 	updatePlots();
 }
@@ -256,7 +260,8 @@ function drawPoint(ctx, x, y) {
 	ctx.stroke();
 }
 
-function draw_bezier_curve(ctx, pt1, pt2, pt3, pt4, BezierIdx) {
+function draw_bezier_curve(ctx, pt1, pt2, pt3, pt4, BezierIdx)
+{
 	//draw curve
 	ctx.lineWidth = 3;
 	ctx.strokeStyle = Colors[BezierIdx % Colors.length];
@@ -370,94 +375,74 @@ function draw_acceleration() {
 CALCULATIONS
 */
 
-function calc_mirrored_tangents() {
-	/*re-arranges the points so that the splines are of mirrored continuity */
-	var newPoints = [];
+function AlignPoints(PreIdx, CurIdx, SucIdx, Reference, NewPos)
+{
+	//Cur is the interpolated point on the spline.
+	//Pre and Suc are the handles before and after Cur.
+	//Reference is 0, 1, 2 and identifies which of pre, cur, suc are to be kept.
+	//The reference point is typically the one that the user is interactively moving.
+	//NewPos is the new position of the reference point.
+	//We do the move here in this function.
 
-	if (canvasPoints.length > 4) {
-		for (var i = 3; i < canvasPoints.length; i += 3) {
-
-			var pre = canvasPoints[i-1];
-			var cur = canvasPoints[i];
-
-			// get the distance of pre to cur
-			var dist = [Math.abs(cur[0]-pre[0]), Math.abs(cur[1]-pre[1])];
-			
-			// calculate new successor
-			var suc = [];
-			if (cur[0] > pre[0]) 
-				suc.push(cur[0]+dist[0]);
-			else
-				suc.push(cur[0]-dist[0]);
-			if (cur[1] > pre[1]) 
-				suc.push(cur[1]+dist[1]);
-			else 
-				suc.push(cur[1]-dist[1]);
-
-			if (i >= canvasPoints.length-2)
-				newPoints.push(pre, cur);
-			else
-				newPoints.push(pre, cur, suc);
-		}
-		while (canvasPoints.length > 2) {
-			canvasPoints.pop();
-		}
-		while (newPoints.length > 0) {
-			var pt = newPoints.shift();
-			canvasPoints.push(pt);
-		}
+	// console.log(PreIdx, CurIdx, SucIdx, Reference, NewPos);
+	
+	//Our computations go from Pre to Suc. This works well when Pre is the reference.
+	//We can just switch Pre and Suc, when Suc is the reference.
+	//If Cur is the reference, we deal with it later.
+	if (Reference == 2)
+	{
+		[PreIdx, SucIdx] = [SucIdx, PreIdx];
 	}
+
+	var Pre = canvasPoints[PreIdx];
+	var Cur = canvasPoints[CurIdx];
+	var Suc = canvasPoints[SucIdx];
+
+	//If the handles are moved, then we do the move before the calculations.
+	if (Reference != 1)
+	{
+		Pre = NewPos;
+	}
+
+  // Normalized Vector of Pre to Cur
+  const PreCur = [Cur[0] - Pre[0], Cur[1] - Pre[1]];
+  const PreCurLength = Math.sqrt(Math.pow(PreCur[0], 2) + Math.pow(PreCur[1], 2));
+  const PreCurNormalized = [PreCur[0] / PreCurLength, PreCur[1] / PreCurLength];
+  // Length of the Vector of Cur to Suc
+  const CurSuc = [Suc[0] - Cur[0], Suc[1] - Cur[1]];
+  const CurSucLength = Math.sqrt(Math.pow(CurSuc[0], 2) + Math.pow(CurSuc[1], 2));
+
+  //Which point are we moving? The one on the spline, or its handles?
+	if (Reference == 1)
+	{
+		//Do the actual move of the interpolated point
+		Cur = NewPos;
+		//When the interpolated point is moved, we adjust both handles.
+		Pre = [ Cur[0] - PreCur[0], Cur[1] - PreCur[1] ];
+		Suc = [ Cur[0] + CurSuc[0], Cur[1] + CurSuc[1] ];
+	}
+	else
+	{
+	  //Calculate new Successor for when the handles are moved.
+	  const NewCurSucLength = (MODE == "ALIGN") ? CurSucLength : PreCurLength;
+		Suc = [ Cur[0] + NewCurSucLength * PreCurNormalized[0], Cur[1] + NewCurSucLength * PreCurNormalized[1] ];
+	}
+
+  //Re-assign new values.
+	canvasPoints[PreIdx] = Pre;
+	canvasPoints[CurIdx] = Cur;
+	canvasPoints[SucIdx] = Suc;
 }
 
-function calc_aligned_tangents() {
-	/*re-arranges the points so that the splines are of aligned continuity*/
-	var newPoints = [];
-	if (canvasPoints.length > 4) {
-		for (var i = 3; i < canvasPoints.length; i += 3) {
 
-			var pre = canvasPoints[i-1];
-			var cur = canvasPoints[i];
-
-			if (i == canvasPoints.length -1) {
-				newPoints.push(pre, cur);
-				break;
-			}
-
-			var suc = canvasPoints[i+1];
-
-			// get the distance of pre to cur
-			var dist = [Math.abs(cur[0]-pre[0]), Math.abs(cur[1]-pre[1])];
-			
-			// calculate new successor
-			if (dist[0] < dist[1]) {
-				// move in x direction
-				var y_fac = Math.floor(dist[0] * Math.abs(suc[1]-cur[1])/dist[1]);
-				if (cur[0] > pre[0])
-					suc[0] = cur[0] + y_fac;
-				else
-					suc[0] = cur[0] - y_fac;
-			}
-			else {
-				// move in y direction
-				var x_fac = Math.floor(dist[1] * Math.abs(suc[0]-cur[0])/dist[0]);
-				if (cur[1] > pre[1]) 
-					suc[1] = cur[1] + x_fac;
-				else 
-					suc[1] = cur[1] - x_fac;
-			}
-
-			newPoints.push(pre, cur, suc);
-		}
-	}
-
-	while (canvasPoints.length > 2) {
-		canvasPoints.pop();
-	}
-	while (newPoints.length > 0) {
-		var pt = newPoints.shift();
-		canvasPoints.push(pt);
-	}
+function CalcContinuityAll()
+{
+  for (var i = 3; i < canvasPoints.length-1; i += 3)
+  {
+  	AlignPoints(i-1, i, i+1, 0, canvasPoints[i-1]);
+  }
 }
+
 
 function get_velocity_points(b, n) {
 	/*Return the points to draw a velocity plot*/
