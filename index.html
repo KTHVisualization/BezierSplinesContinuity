@@ -3,8 +3,8 @@
 <head>
 	<link rel="stylesheet" type="text/css" href="style.css">
 	<script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
+	<script type="text/javascript" src="bezierc2spline.js"></script>
 	<script type="text/javascript" src="script.js"></script>
-
 </head>
 
 <body>
@@ -13,9 +13,12 @@
 
 	<h1 id="pagename">Bézier Splines: Continuity</h1>
 	<p id="pagedescription">
-		Created by Jule Schmidt for the course DH2320 / DD2258 at KTH in 2023.
-		Inspired by the visualizations in Freya Holmér's video <a href="https://www.youtube.com/watch?v=jvPPXbo87ds">The Continuity of Splines</a>.
-		Small modifications by <a href="http://tinoweinkauf.net">Tino Weinkauf</a>.
+		Created by <a href="https://github.com/julemarie">Jule Schmidt</a>
+		and <a href="http://tinoweinkauf.net">Tino Weinkauf</a>
+		for the course <a href="https://www.kth.se/student/kurser/kurs/DH2320">DH2320</a> / <a href="https://www.kth.se/student/kurser/kurs/DD2258">DD2258</a> at KTH.
+		Inspired by the visualizations in <a href="https://acegikmo.com">Freya Holmér</a>'s video <a href="https://www.youtube.com/watch?v=jvPPXbo87ds">The Continuity of Splines</a>.
+		Uses <a href="https://github.com/Zunawe">Bryce Wilson</a>'s <a href="https://github.com/Zunawe/bezier-spline">code for solving C2 Bézier splines</a>
+		and <a href="https://plotly.com/">Plotly</a>.
 	</p>
 
 	<div id="plotCanvasContainer" class="main-plot-container">
@@ -27,21 +30,23 @@
 	</div>
 
 	<div class="buttonArea">
-		<button 
-			id="broken"
-			onclick="brokenContinuity()">
-			broken
-		</button>
-		<button 
-			id="aligned"
-			onclick="alignContinuity()">
-			align
-		</button>
-		<button 
-			id="mirrored"
-			onclick="mirrorContinuity()">
-			mirror
-		</button>
+
+		<div id="ContinuityModes" class="toggle-buttons">
+	    <input type="radio" id="broken" value="0" name="contmode" checked="checked" />
+	    <label for="broken">Broken (C0)</label>
+
+	    <input type="radio" id="aligned" value="1" name="contmode" />
+	    <label for="aligned">Aligned (G1)</label>
+
+	    <input type="radio" id="mirrored" value="2" name="contmode" />
+	    <label for="mirrored">Mirrored (C1)</label>
+
+	    <input type="radio" id="G2" value="3" name="contmode" />
+	    <label for="G2">G2</label>
+
+	    <input type="radio" id="C2" value="4" name="contmode" />
+	    <label for="C2">C2</label>
+		</div>
 
 		<button class="clear-canvas" onclick="resetCanvas()">
 	  		Clear all Curves

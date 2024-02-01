@@ -1,8 +1,8 @@
 const canvasPoints = [];
 const Colors = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00'];
 
-const modes = ["BROKEN", "ALIGN", "MIRROR"];
-let MODE = modes[0];
+const modes = ["BROKEN", "ALIGN", "MIRROR", "G2", "C2"];
+var MODE = modes[0];
 
 let MovingPointIdx = -1;
 let EatTheNextClick = false;
@@ -40,34 +40,40 @@ const accelerationLayout = {
 	title: "Acceleration"
 }
 
-function init_view(){
+function init_view()
+{
   // Resize canvas when window is resized.
   window.addEventListener('resize', resizeCanvas);
   // Set canvas size for the first time.
   resizeCanvas();
 
   // Register events for moving points
-	plotCanvas = document.getElementById("plotCanvas");
+	var plotCanvas = document.getElementById("plotCanvas");
 	plotCanvas.addEventListener("mousedown", canvasMouseDown);
 	plotCanvas.addEventListener("mousemove", canvasMouseMove);
 	plotCanvas.addEventListener("mouseup", canvasMouseUp);
 	plotCanvas.addEventListener("click", canvasClick);
 
-	document.getElementById("broken").style.background = "#0da2f7";
-	document.getElementById("aligned").style.background = "initial";
-	document.getElementById("mirrored").style.background = "initial";
+	//Register events for continuity buttons
+	var ContinuityBtns = document.querySelectorAll("#ContinuityModes input");
+	for (Btn of ContinuityBtns)
+	{
+		Btn.addEventListener("click", ContinuityClick);
+	}
 
 	Plotly.newPlot("velocityPlot", [], velocityLayout, plotConfig);
 	Plotly.newPlot("accelerationPlot", [], accelerationLayout, plotConfig);
+  UpdatePlots();
 }
 
 // Runs each time the DOM window resize event fires.
-function resizeCanvas() {
+function resizeCanvas()
+{
 	plotCanvas = document.getElementById("plotCanvas");
 	plotCanvasContainer = document.getElementById("plotCanvasContainer");
   plotCanvas.width = plotCanvasContainer.clientWidth;
   plotCanvas.height = plotCanvasContainer.clientHeight;
-  draw_tangents();
+  UpdateCanvas();
 }
 
 
@@ -128,28 +134,42 @@ function canvasMouseMove()
 {
 	if (MovingPointIdx >= 0 && MovingPointIdx < canvasPoints.length)
 	{
-		//Move point to current cursor
+		//Get current cursor position. The moved point should go there, if possible.
 	  var cv = document.getElementById("plotCanvas");
 	  let x = event.clientX - cv.getBoundingClientRect().left;
 	  let y = event.clientY - cv.getBoundingClientRect().top;
 
-	  if (MovingPointIdx <= 1 || MovingPointIdx >= canvasPoints.length - 2)
+	  if (MODE == modes[0] || MODE == modes[1] || MODE == modes[2])
 	  {
-		  //We can always move the first and last 2 points.
-	  	canvasPoints[MovingPointIdx] = [x, y];
+		  //We can always move the first and last 2 points,
+		  // or if we are in the free mode ("Broken")
+		  if (MovingPointIdx <= 1 || MovingPointIdx >= canvasPoints.length - 2 || MODE == modes[0])
+		  {
+		  	canvasPoints[MovingPointIdx] = [x, y];
+		  }
+		  else
+		  {
+		  	//Adjust neighboring points while moving
+		  	CurIdx = 3 * Math.trunc((MovingPointIdx + 1) / 3);
+		  	PreIdx = CurIdx - 1;
+		  	SucIdx = CurIdx + 1;
+		  	Reference = MovingPointIdx - PreIdx;
+		  	AlignPoints(PreIdx, CurIdx, SucIdx, Reference, [x, y]);
+		  }
 	  }
 	  else
 	  {
-	  	//Adjust neighboring points while moving
-	  	CurIdx = 3 * Math.trunc((MovingPointIdx + 1) / 3);
-	  	PreIdx = CurIdx - 1;
-	  	SucIdx = CurIdx + 1;
-	  	Reference = MovingPointIdx - PreIdx;
-	  	AlignPoints(PreIdx, CurIdx, SucIdx, Reference, [x, y]);
+	  	// C2 / G2 modes. We need to solve for the spline.
+	  	// And only the knots (interplated points) can be moved.
+		  if (MovingPointIdx % 3 != 0) return; //Not a knot! :-)
+
+		  //Knots can be moved.
+	  	canvasPoints[MovingPointIdx] = [x, y];
+	  	SolveSpline();
 	  }
 
-	  draw_tangents();
-	  updatePlots();
+	  UpdateCanvas();
+	  UpdatePlots();
 	}	
 }
 
@@ -187,17 +207,17 @@ function canvasClick(event)
 		canvasPoints.push([x, y]);
 	}
 
-	draw_tangents();
-	updatePlots();	
+	UpdateCanvas();
+	UpdatePlots();	
 }
 
 /*
 BUTTON CALLBACKS
 */
 
-
 /*clear canvas button*/
-function resetCanvas() {
+function resetCanvas()
+{
 	//empty the points array
 	canvasPoints.length = 0;
 
@@ -205,7 +225,8 @@ function resetCanvas() {
 	clearCanvas();
 }
 
-function clearCanvas() {
+function clearCanvas()
+{
 	// remove all drawings from the main canvas
 	var cv = document.getElementById("plotCanvas");
 	var ctx = cv.getContext("2d");
@@ -216,40 +237,18 @@ function clearCanvas() {
 	Plotly.newPlot("accelerationPlot", [], accelerationLayout, plotConfig);
 }
 
-/*broken continuity button*/
-function brokenContinuity() {
-	MODE = modes[0];
-	document.getElementById("broken").style.background = "#0da2f7";
-	document.getElementById("aligned").style.background = "initial";
-	document.getElementById("mirrored").style.background = "initial";
-}
 
-/*align continuity button*/
-function alignContinuity() {
-	MODE = modes[1];
-	document.getElementById("broken").style.background = "initial";
-	document.getElementById("aligned").style.background = "#0da2f7";
-	document.getElementById("mirrored").style.background = "initial";
-
+function ContinuityClick(event)
+{
+	var SelectedMode = event.target.value;
+	MODE = modes[SelectedMode];
 	CalcContinuityAll();
-	draw_tangents();
-	updatePlots();
+	UpdateCanvas();
+	UpdatePlots();
 }
 
-/*mirror continuity button*/
-function mirrorContinuity() {
-	MODE = modes[2];
-	document.getElementById("broken").style.background = "initial";
-	document.getElementById("aligned").style.background = "initial";
-	document.getElementById("mirrored").style.background = "#0da2f7";
-
-	CalcContinuityAll();
-	draw_tangents();
-	updatePlots();
-}
-
-
-function drawPoint(ctx, x, y) {
+function drawPoint(ctx, x, y)
+{
 	//draw a point onto the canvas
 	ctx.beginPath();
 	ctx.arc(x, y, 3, 0, 2*Math.PI);
@@ -277,7 +276,8 @@ function draw_bezier_curve(ctx, pt1, pt2, pt3, pt4, BezierIdx)
 	ctx.stroke();
 }
 
-function draw_tangents()
+
+function UpdateCanvas()
 {
 	clearCanvas();
 
@@ -302,7 +302,7 @@ function draw_tangents()
 }
 
 
-function updatePlots()
+function UpdatePlots()
 {
 	[Velocity, Acceleration] = ComputeDerivatives();
 	DrawVelocity(Velocity);
@@ -466,11 +466,44 @@ function AlignPoints(PreIdx, CurIdx, SucIdx, Reference, NewPos)
 
 function CalcContinuityAll()
 {
-  for (var i = 3; i < canvasPoints.length-1; i += 3)
+  if (MODE == modes[0] || MODE == modes[1] || MODE == modes[2])
   {
-  	AlignPoints(i-1, i, i+1, 0, canvasPoints[i-1]);
-  }
+	  for (var i = 3; i < canvasPoints.length-1; i += 3)
+	  {
+	  	AlignPoints(i-1, i, i+1, 0, canvasPoints[i-1]);
+	  }
+	}
+	else
+	{
+		SolveSpline();
+	}
 }
+
+
+function SolveSpline()
+{
+	//Get every third canvas point
+	Knots = [];
+	for(var i=0;i<canvasPoints.length;i+=3)
+	{
+		Knots.push(canvasPoints[i]);
+	}
+
+	//Solve
+	var Spline = (MODE == modes[3]) ? new BezierSpline(Knots) : new BezierSpline(Knots, () => 1);
+
+	//Get the result
+	canvasPoints.length = 0;
+	for (var i=0;i<Spline.curves.length;i++)
+	{
+		for (var j=((i==0)?0:1);j<4;j++)
+		{
+			canvasPoints.push(Spline.curves[i][j]);
+			// console.log(Spline.curves[i][j]);
+		}
+	}
+}
+
 
 function GetFirstDerivative(BezierIdx)
 {
