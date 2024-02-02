@@ -170,7 +170,7 @@ function canvasMouseMove()
 
 	  UpdateCanvas();
 	  UpdatePlots();
-	}	
+	}
 }
 
 function canvasMouseUp()
@@ -519,11 +519,20 @@ function GetFirstDerivative(BezierIdx)
 	const C = canvasPoints[c];
 	const D = canvasPoints[d];
 
+	//We negate the y-values here. Why?
+	// The WebGL coordinate system has its origin in the upper left corner.
+	// The velocity plot is then confusing. One should be able to see the tangent
+	// from the BezierSpline directly in the plot, but one would need to mirror at the y-axis.
+	// Hence, we do it here in the second part of the equations:
 	const dpoints = 
 	[
-		[3 * (B[0]-A[0]), 3 * (B[1]-A[1])],
-		[3 * (C[0]-B[0]), 3 * (C[1]-B[1])],
-		[3 * (D[0]-C[0]), 3 * (D[1]-C[1])]
+		[3 * (B[0]-A[0]), 3 * (A[1]-B[1])], //The flipped version
+		[3 * (C[0]-B[0]), 3 * (B[1]-C[1])],
+		[3 * (D[0]-C[0]), 3 * (C[1]-D[1])]
+
+		// [3 * (B[0]-A[0]), 3 * (B[1]-A[1])], //The proper version
+		// [3 * (C[0]-B[0]), 3 * (C[1]-B[1])],
+		// [3 * (D[0]-C[0]), 3 * (D[1]-C[1])]
 	];
 
 	return dpoints;
