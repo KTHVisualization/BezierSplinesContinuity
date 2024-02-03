@@ -11,11 +11,12 @@ const SamplePoints = [];
 const NumSamplesPerBezier = 100;
 var NearestSamplePIdx = -1;
 var NearestSampleTangent = [];
+var NearestSampleAcceleration = [];
 
 const MoveDistanceThreshold = 10;
 const TangentDistanceThreshold = 40;
 
-const plotLayout = {
+const plotLayout1 = {
 	showlegend: false,
 	hovermode: false,
   xaxis: { showticklabels: false, autorange: true },
@@ -29,7 +30,24 @@ const plotLayout = {
 	  t: 50,
 	  pad: 4
 	},
-}
+};
+// These layouts shall be indentical.
+// However, without explicitly duplicating them, the plots will influence each other when sizing.
+const plotLayout2 = {
+	showlegend: false,
+	hovermode: false,
+  xaxis: { showticklabels: false, autorange: true },
+  yaxis: { showticklabels: false, autorange: true },
+  autosize: true,
+  margin:
+  {
+	  l: 10,
+	  r: 10,
+	  b: 10,
+	  t: 50,
+	  pad: 4
+	},
+};
 
 const plotConfig = {
 	responsive: true,
@@ -40,12 +58,12 @@ const plotConfig = {
 }
 
 const velocityLayout = {
-	...plotLayout,
+	...plotLayout1,
 	title: "Velocity"
 }
 
 const accelerationLayout = {
-	...plotLayout,
+	...plotLayout2,
 	title: "Acceleration"
 }
 
@@ -203,7 +221,7 @@ function canvasMouseMove()
 				// console.log(`BezierIdx = ${BezierIdx} and t = ${t}`);
 
 				//Get the derivative / tangent
-				FD = GetFirstDerivative(BezierIdx);
+				const FD = GetFirstDerivative(BezierIdx);
 				//Get the tangent
 				NearestSampleTangent = [
 							Math.pow(1-t, 2)                      * FD[0][0]
@@ -214,9 +232,14 @@ function canvasMouseMove()
 						+         (1-t)    * 2 *          t     * FD[1][1]
 						+                        Math.pow(t, 2) * FD[2][1]
 						];
+
+				const SD = GetSecondDerivative(FD);
+				NearestSampleAcceleration = [(1-t) * SD[0][0] + t * SD[1][0],
+												             (1-t) * SD[0][1] + t * SD[1][1]];
 			}
-			
+
 			UpdateCanvas();
+			UpdatePlots();
 		}
 	}
 }
@@ -533,7 +556,48 @@ function DrawVelocity(Velocity)
     velocityShapes.push(DerivativeBezier);
   }
 
-  Plotly.react("velocityPlot", velocityPoints, {...velocityLayout, shapes: velocityShapes}, plotConfig);
+  if (NearestSamplePIdx >= 0)
+  {
+    var TangentVector =
+    {
+      x: [0, NearestSampleTangent[0]],
+      y: [0, -NearestSampleTangent[1]],
+      mode: "lines+markers",
+      line:
+      {
+      	width: 6
+      },
+      marker:
+      {
+      	color: 'rgba(0, 0, 0, 1)',
+        size: [6, 18],
+      }
+    };
+    velocityPoints.push(TangentVector);
+
+    const SF = 0.2;
+    var AccelerationVector =
+    {
+      x: [NearestSampleTangent[0], NearestSampleTangent[0] + SF *  NearestSampleAcceleration[0]],
+      y: [-NearestSampleTangent[1], -NearestSampleTangent[1] + SF * -NearestSampleAcceleration[1]],
+      mode: "lines+markers",
+      line:
+      {
+      	width: 3,
+      	dash: 'solid'
+      },
+      marker:
+      {
+      	color: 'rgba(0, 0, 0, 1)',
+        size: [3, 9],
+      }
+    };
+    velocityPoints.push(AccelerationVector);
+	}
+
+  Plotly.react("velocityPlot", velocityPoints,
+  						{...velocityLayout, shapes: velocityShapes},
+  						plotConfig);
 }
 
 
@@ -557,6 +621,24 @@ function DrawAcceleration(Acceleration)
 
     accelerationPoints.push(AccData);
   }
+
+  var AccelerationVector =
+  {
+    x: [0, NearestSampleAcceleration[0]],
+    y: [0, -NearestSampleAcceleration[1]],
+    mode: "lines+markers",
+    line:
+    {
+    	width: 3,
+    	dash: 'solid'
+    },
+    marker:
+    {
+    	color: 'rgba(0, 0, 0, 1)',
+      size: [3, 9],
+    }
+  };
+  accelerationPoints.push(AccelerationVector);
 
   Plotly.react("accelerationPlot", accelerationPoints, accelerationLayout, plotConfig);
 }
@@ -628,14 +710,14 @@ function AlignPoints(PreIdx, CurIdx, SucIdx, Reference, NewPos)
 
 function CalcContinuityAll()
 {
-  if (MODE == modes[0] || MODE == modes[1] || MODE == modes[2])
+  if (MODE == modes[1] || MODE == modes[2])
   {
 	  for (var i = 3; i < BezierPoints.length-1; i += 3)
 	  {
 	  	AlignPoints(i-1, i, i+1, 0, BezierPoints[i-1]);
 	  }
 	}
-	else
+	else if (MODE == modes[3] || MODE == modes[4])
 	{
 		SolveSpline();
 	}
