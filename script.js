@@ -1,11 +1,19 @@
-const canvasPoints = [];
+const BezierPoints = [];
 const Colors = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00'];
 
 const modes = ["BROKEN", "ALIGN", "MIRROR", "G2", "C2"];
 var MODE = modes[0];
 
-let MovingPointIdx = -1;
-let EatTheNextClick = false;
+var MovingPointIdx = -1;
+var EatTheNextClick = false;
+
+const SamplePoints = [];
+const NumSamplesPerBezier = 100;
+var NearestSamplePIdx = -1;
+var NearestSampleTangent = [];
+
+const MoveDistanceThreshold = 10;
+const TangentDistanceThreshold = 40;
 
 const plotLayout = {
 	showlegend: false,
@@ -13,13 +21,14 @@ const plotLayout = {
   xaxis: { showticklabels: false, autorange: true },
   yaxis: { showticklabels: false, autorange: true },
   autosize: true,
-  margin: {
-  l: 10,
-  r: 10,
-  b: 10,
-  t: 50,
-  pad: 4
-},
+  margin:
+  {
+	  l: 10,
+	  r: 10,
+	  b: 10,
+	  t: 50,
+	  pad: 4
+	},
 }
 
 const plotConfig = {
@@ -63,7 +72,6 @@ function init_view()
 
 	Plotly.newPlot("velocityPlot", [], velocityLayout, plotConfig);
 	Plotly.newPlot("accelerationPlot", [], accelerationLayout, plotConfig);
-  UpdatePlots();
 }
 
 // Runs each time the DOM window resize event fires.
@@ -77,14 +85,15 @@ function resizeCanvas()
 }
 
 
-function GetNearestPointIdx(x, y)
+function GetNearestPointIdx(PointSet, x, y, DistanceThreshold)
 {
-	//Find closest distance to any moveable point
+	//Find closest distance to a point in the given pointset.
+	//Returns the Idx, if that closest distance is less than the given threshold.
 	let MinDistance = 1000000;
 	let MinPIdx = -1;
-  for (var i = 0; i < canvasPoints.length; i++)
+  for (var i = 0; i < PointSet.length; i++)
   {
-    var cvPt = canvasPoints[i];
+    var cvPt = PointSet[i];
     var distance = Math.sqrt(Math.pow(cvPt[0] - x, 2) + Math.pow(cvPt[1] - y, 2));
     if (distance < MinDistance)
   	{
@@ -94,7 +103,6 @@ function GetNearestPointIdx(x, y)
   }
 
   //Are we rather close?
-  let DistanceThreshold = 10
   if (MinDistance <= DistanceThreshold)
   {
   	//We found a close point
@@ -116,7 +124,7 @@ function canvasMouseDown(event)
 	//If close to an existing point, then we move that point, else we add a new point.
 
 	//Find closest distance to any moveable point
-	NearestPointIdx = GetNearestPointIdx(x, y);
+	NearestPointIdx = GetNearestPointIdx(BezierPoints, x, y, MoveDistanceThreshold);
 	if (NearestPointIdx >= 0 && !event.ctrlKey)
 	{
   	//We found a point to move
@@ -132,20 +140,20 @@ function canvasMouseDown(event)
 
 function canvasMouseMove()
 {
-	if (MovingPointIdx >= 0 && MovingPointIdx < canvasPoints.length)
-	{
-		//Get current cursor position. The moved point should go there, if possible.
-	  var cv = document.getElementById("plotCanvas");
-	  let x = event.clientX - cv.getBoundingClientRect().left;
-	  let y = event.clientY - cv.getBoundingClientRect().top;
+	//Get current cursor position. The moved point should go there, if possible.
+  var cv = document.getElementById("plotCanvas");
+  const x = event.clientX - cv.getBoundingClientRect().left;
+  const y = event.clientY - cv.getBoundingClientRect().top;
 
+	if (MovingPointIdx >= 0 && MovingPointIdx < BezierPoints.length)
+	{
 	  if (MODE == modes[0] || MODE == modes[1] || MODE == modes[2])
 	  {
 		  //We can always move the first and last 2 points,
 		  // or if we are in the free mode ("Broken")
-		  if (MovingPointIdx <= 1 || MovingPointIdx >= canvasPoints.length - 2 || MODE == modes[0])
+		  if (MovingPointIdx <= 1 || MovingPointIdx >= BezierPoints.length - 2 || MODE == modes[0])
 		  {
-		  	canvasPoints[MovingPointIdx] = [x, y];
+		  	BezierPoints[MovingPointIdx] = [x, y];
 		  }
 		  else
 		  {
@@ -164,18 +172,59 @@ function canvasMouseMove()
 		  if (MovingPointIdx % 3 != 0) return; //Not a knot! :-)
 
 		  //Knots can be moved.
-	  	canvasPoints[MovingPointIdx] = [x, y];
+	  	BezierPoints[MovingPointIdx] = [x, y];
 	  	SolveSpline();
 	  }
 
+	  NearestSamplePIdx = -1;
 	  UpdateCanvas();
 	  UpdatePlots();
+	}
+	else
+	{
+		//We are not moving a point, but just moving the mouse over the canvas.
+		//If we come close to the curve, we show the tangent.
+		const PrevNearestSamplePIdx = NearestSamplePIdx;
+		NearestSamplePIdx = GetNearestPointIdx(SamplePoints, x, y, TangentDistanceThreshold);
+		if (PrevNearestSamplePIdx != NearestSamplePIdx)
+		{
+			if (NearestSamplePIdx >= 0 && NearestSamplePIdx < SamplePoints.length)
+			{
+				//On which Bezier is this sample?
+				// NumSamplesPerBezier = 5
+				// Samples: 0   1   2   3   4   5   6   7   8   9   10   11   12   13   14   15
+				// Idx:     0   0   0   0   0   1   1   1   1   2    2    2    2    3    3    3
+				// t:       0 .25  .5 .75   1 .25  .5 .75   1 .25   .5  .75    1  .25   .5  .75
+				// const BezierIdx = Math.trunc(NearestSamplePIdx / NumSamplesPerBezier);
+				const BezierIdx = (NearestSamplePIdx == 0) ? 0 : Math.trunc((NearestSamplePIdx - 1) / (NumSamplesPerBezier - 1));
+				//Get the t-value
+				const t = (NearestSamplePIdx - BezierIdx * (NumSamplesPerBezier - 1)) / (NumSamplesPerBezier - 1);
+
+				// console.log(`BezierIdx = ${BezierIdx} and t = ${t}`);
+
+				//Get the derivative / tangent
+				FD = GetFirstDerivative(BezierIdx);
+				//Get the tangent
+				NearestSampleTangent = [
+							Math.pow(1-t, 2)                      * FD[0][0]
+						+         (1-t)    * 2 *          t     * FD[1][0]
+						+                        Math.pow(t, 2) * FD[2][0]
+						,
+							Math.pow(1-t, 2)                      * FD[0][1]
+						+         (1-t)    * 2 *          t     * FD[1][1]
+						+                        Math.pow(t, 2) * FD[2][1]
+						];
+			}
+			
+			UpdateCanvas();
+		}
 	}
 }
 
 function canvasMouseUp()
 {
-	MovingPointIdx = -1;	
+	MovingPointIdx = -1;
+	if (EatTheNextClick) UpdateSamplePoints();
 }
 
 function canvasClick(event)
@@ -195,18 +244,19 @@ function canvasClick(event)
 	if (event.ctrlKey)
 	{
 		//Try removing a point
-		PIdx = GetNearestPointIdx(x, y);
+		PIdx = GetNearestPointIdx(BezierPoints, x, y, MoveDistanceThreshold);
 		if (PIdx >= 0)
 		{
-			canvasPoints.splice(PIdx, 1)
+			BezierPoints.splice(PIdx, 1)
 		}
 	}
 	else
 	{
 		//store point in list for bézier curve
-		canvasPoints.push([x, y]);
+		BezierPoints.push([x, y]);
 	}
 
+	UpdateSamplePoints();
 	UpdateCanvas();
 	UpdatePlots();	
 }
@@ -218,11 +268,13 @@ BUTTON CALLBACKS
 /*clear canvas button*/
 function resetCanvas()
 {
-	//empty the points array
-	canvasPoints.length = 0;
+	//empty the points arrays
+	BezierPoints.length = 0;
+	SamplePoints.length = 0;
 
 	// remove all drawings
 	clearCanvas();
+	clearPlots();
 }
 
 function clearCanvas()
@@ -231,10 +283,13 @@ function clearCanvas()
 	var cv = document.getElementById("plotCanvas");
 	var ctx = cv.getContext("2d");
 	ctx.clearRect(0, 0, cv.width, cv.height);
+}
 
+function clearPlots()
+{
 	// empty the velocity and acceleration plots
-	Plotly.newPlot("velocityPlot", [], velocityLayout, plotConfig);
-	Plotly.newPlot("accelerationPlot", [], accelerationLayout, plotConfig);
+	Plotly.react("velocityPlot", [], velocityLayout, plotConfig);
+	Plotly.react("accelerationPlot", [], accelerationLayout, plotConfig);
 }
 
 
@@ -243,6 +298,7 @@ function ContinuityClick(event)
 	var SelectedMode = event.target.value;
 	MODE = modes[SelectedMode];
 	CalcContinuityAll();
+	UpdateSamplePoints();
 	UpdateCanvas();
 	UpdatePlots();
 }
@@ -253,6 +309,57 @@ function drawPoint(ctx, x, y)
 	ctx.beginPath();
 	ctx.arc(x, y, 3, 0, 2*Math.PI);
 	ctx.stroke();
+}
+
+
+function drawArrow(ctx, anchor, vector)
+{
+	//       p7
+	//
+	//  p6 p4   p3 p5
+	//  
+	//  
+	//  
+	//  
+	//     p2   p1
+
+	const Length = Math.sqrt(Math.pow(vector[0], 2) + Math.pow(vector[1], 2));
+	const HeadLength = 80;
+	const HeadWidth = 70;
+	const Width = 30;
+	const ScaleFactor = 0.2;
+
+	//Angle to y-axis, since this is how we orient the basic, untransformed arrow.
+	const Angle = Math.atan2(-vector[0], vector[1]);
+
+	//We first scale, then rotate, then translate.
+	//The first transformation will be called last.
+	ctx.translate(anchor[0], anchor[1]);
+	ctx.rotate(Angle);
+	ctx.scale(ScaleFactor, ScaleFactor);
+
+  const p1 = [0 + Width / 2, 0];
+  const p2 = [0 - Width / 2, 0];
+  const p3 = [0 + Width / 2, Length - HeadLength];
+  const p4 = [0 - Width / 2, Length - HeadLength];
+  const p5 = [0 + HeadWidth / 2, Length - HeadLength];
+  const p6 = [0 - HeadWidth / 2, Length - HeadLength];
+  const p7 = [0, Length];
+
+  ctx.moveTo(p1[0], p1[1]);
+  ctx.beginPath();
+  ctx.lineTo(p3[0], p3[1]);
+  ctx.lineTo(p5[0], p5[1]);
+  ctx.lineTo(p7[0], p7[1]);
+  ctx.lineTo(p6[0], p6[1]);
+  ctx.lineTo(p4[0], p4[1]);
+  ctx.lineTo(p2[0], p2[1]);
+  ctx.lineTo(p1[0], p1[1]);
+  ctx.closePath();
+  ctx.arc(0, 0, Width/2, 0, 2*Math.PI);
+  ctx.fill();
+
+  ctx.resetTransform();
 }
 
 function draw_bezier_curve(ctx, pt1, pt2, pt3, pt4, BezierIdx)
@@ -284,9 +391,9 @@ function UpdateCanvas()
 	var cv = document.getElementById("plotCanvas");
 	var ctx = cv.getContext("2d");
 
-	for (var i = 0; i < canvasPoints.length; i++)
+	for (var i = 0; i < BezierPoints.length; i++)
 	{
-		drawPoint(ctx, canvasPoints[i][0], canvasPoints[i][1]);
+		drawPoint(ctx, BezierPoints[i][0], BezierPoints[i][1]);
 
 		if (i >= 3 && i % 3 == 0)
 		{
@@ -294,33 +401,88 @@ function UpdateCanvas()
 			//BezierIdx = 0, 1, 2,  3,  4, ...
 			const BezierIdx = (i-3) / 3;
 
-			draw_bezier_curve(ctx, canvasPoints[i-3], canvasPoints[i-2],
-														 canvasPoints[i-1], canvasPoints[i],
+			draw_bezier_curve(ctx, BezierPoints[i-3], BezierPoints[i-2],
+														 BezierPoints[i-1], BezierPoints[i],
 														 BezierIdx);
 		}
 	}
+
+	// for (SP of SamplePoints)
+	// {
+	// 	ctx.beginPath();
+	// 	ctx.arc(SP[0], SP[1], TangentDistanceThreshold / 2, 0, 2*Math.PI);
+	// 	ctx.stroke();
+	// }
+
+	if (NearestSamplePIdx >= 0 && NearestSamplePIdx < SamplePoints.length)
+	{
+		drawArrow(ctx, SamplePoints[NearestSamplePIdx], NearestSampleTangent);
+	}
+}
+
+
+function UpdateSamplePoints()
+{
+	SamplePoints.length = 0;
+
+  for (var i = 3; i < BezierPoints.length; i += 3)
+	{
+		for(var j=(i==3) ? 0 : 1;j<NumSamplesPerBezier;j++)
+		{
+			const t = j / (NumSamplesPerBezier - 1);
+
+			SamplePoints.push([
+					Math.pow(1-t, 3)                      * BezierPoints[i-3][0]
+				+ Math.pow(1-t, 2) * 3 *          t     * BezierPoints[i-2][0]
+				+         (1-t)    * 3 * Math.pow(t, 2) * BezierPoints[i-1][0]
+				+                        Math.pow(t, 3) * BezierPoints[i  ][0]
+				,
+					Math.pow(1-t, 3)                      * BezierPoints[i-3][1]
+				+ Math.pow(1-t, 2) * 3 *          t     * BezierPoints[i-2][1]
+				+         (1-t)    * 3 * Math.pow(t, 2) * BezierPoints[i-1][1]
+				+                        Math.pow(t, 3) * BezierPoints[i  ][1]
+				]);
+		}
+	}
+
+	// //Find the largest distance between samples
+	// MaxSamplePointDistance = 0;
+	// for (var i=0;i<SamplePoints.length-1;i++)
+	// {
+	// 	const a = SamplePoints[i];
+	// 	const b = SamplePoints[i+1];
+	// 	const Distance = Math.sqrt(Math.pow(a[0] - b[0], 2) + Math.pow(a[1] - b[1], 2));
+	// 	if (MaxSamplePointDistance < Distance) MaxSamplePointDistance = Distance;
+	// }
 }
 
 
 function UpdatePlots()
 {
-	[Velocity, Acceleration] = ComputeDerivatives();
+	[Velocity, Acceleration] = ComputeDerivativesFlipped();
 	DrawVelocity(Velocity);
 	DrawAcceleration(Acceleration);
 }
 
-function ComputeDerivatives()
+function ComputeDerivativesFlipped()
 {
+	// About the flipped version:
+	// The WebGL coordinate system has its origin in the upper left corner.
+	// The velocity plot is then confusing. One should be able to see the tangent
+	// from the BezierSpline directly in the plot, but one would need to mirror at the y-axis.
+	// Hence, we do it here after collecting the proper derivatives.
+
 	FirstDerivatives = [];
 	SecondDerivatives = [];
-  for (var i = 3; i < canvasPoints.length; i += 3)
+  for (var i = 3; i < BezierPoints.length; i += 3)
   {
     //        i = 3, 6, 9, 12, 15, ...
     //BezierIdx = 0, 1, 2,  3,  4, ...
     const BezierIdx = (i - 3) / 3;
 
-    const FD = GetFirstDerivative(BezierIdx);
+    var FD = GetFirstDerivative(BezierIdx);
     if (FD.length != 3) break;
+    FD[0][1] *= -1; FD[1][1] *= -1; FD[2][1] *= -1; //Flip!
     FirstDerivatives.push(FD);
 
     const SD = GetSecondDerivative(FD);
@@ -371,7 +533,7 @@ function DrawVelocity(Velocity)
     velocityShapes.push(DerivativeBezier);
   }
 
-  Plotly.newPlot("velocityPlot", velocityPoints, {...velocityLayout, shapes: velocityShapes}, plotConfig);
+  Plotly.react("velocityPlot", velocityPoints, {...velocityLayout, shapes: velocityShapes}, plotConfig);
 }
 
 
@@ -396,7 +558,7 @@ function DrawAcceleration(Acceleration)
     accelerationPoints.push(AccData);
   }
 
-  Plotly.newPlot("accelerationPlot", accelerationPoints, accelerationLayout, plotConfig);
+  Plotly.react("accelerationPlot", accelerationPoints, accelerationLayout, plotConfig);
 }
 
 
@@ -423,9 +585,9 @@ function AlignPoints(PreIdx, CurIdx, SucIdx, Reference, NewPos)
 		[PreIdx, SucIdx] = [SucIdx, PreIdx];
 	}
 
-	var Pre = canvasPoints[PreIdx];
-	var Cur = canvasPoints[CurIdx];
-	var Suc = canvasPoints[SucIdx];
+	var Pre = BezierPoints[PreIdx];
+	var Cur = BezierPoints[CurIdx];
+	var Suc = BezierPoints[SucIdx];
 
 	//If the handles are moved, then we do the move before the calculations.
 	if (Reference != 1)
@@ -458,9 +620,9 @@ function AlignPoints(PreIdx, CurIdx, SucIdx, Reference, NewPos)
 	}
 
   //Re-assign new values.
-	canvasPoints[PreIdx] = Pre;
-	canvasPoints[CurIdx] = Cur;
-	canvasPoints[SucIdx] = Suc;
+	BezierPoints[PreIdx] = Pre;
+	BezierPoints[CurIdx] = Cur;
+	BezierPoints[SucIdx] = Suc;
 }
 
 
@@ -468,9 +630,9 @@ function CalcContinuityAll()
 {
   if (MODE == modes[0] || MODE == modes[1] || MODE == modes[2])
   {
-	  for (var i = 3; i < canvasPoints.length-1; i += 3)
+	  for (var i = 3; i < BezierPoints.length-1; i += 3)
 	  {
-	  	AlignPoints(i-1, i, i+1, 0, canvasPoints[i-1]);
+	  	AlignPoints(i-1, i, i+1, 0, BezierPoints[i-1]);
 	  }
 	}
 	else
@@ -484,21 +646,21 @@ function SolveSpline()
 {
 	//Get every third canvas point
 	Knots = [];
-	for(var i=0;i<canvasPoints.length;i+=3)
+	for(var i=0;i<BezierPoints.length;i+=3)
 	{
-		Knots.push(canvasPoints[i]);
+		Knots.push(BezierPoints[i]);
 	}
 
 	//Solve
 	var Spline = (MODE == modes[3]) ? new BezierSpline(Knots) : new BezierSpline(Knots, () => 1);
 
 	//Get the result
-	canvasPoints.length = 0;
+	BezierPoints.length = 0;
 	for (var i=0;i<Spline.curves.length;i++)
 	{
 		for (var j=((i==0)?0:1);j<4;j++)
 		{
-			canvasPoints.push(Spline.curves[i][j]);
+			BezierPoints.push(Spline.curves[i][j]);
 			// console.log(Spline.curves[i][j]);
 		}
 	}
@@ -512,27 +674,18 @@ function GetFirstDerivative(BezierIdx)
 	const c = b + 1;
 	const d = c + 1;
 
-	if (d >= canvasPoints.length) return [];
+	if (d >= BezierPoints.length) return [];
 
-	const A = canvasPoints[a];
-	const B = canvasPoints[b];
-	const C = canvasPoints[c];
-	const D = canvasPoints[d];
+	const A = BezierPoints[a];
+	const B = BezierPoints[b];
+	const C = BezierPoints[c];
+	const D = BezierPoints[d];
 
-	//We negate the y-values here. Why?
-	// The WebGL coordinate system has its origin in the upper left corner.
-	// The velocity plot is then confusing. One should be able to see the tangent
-	// from the BezierSpline directly in the plot, but one would need to mirror at the y-axis.
-	// Hence, we do it here in the second part of the equations:
 	const dpoints = 
 	[
-		[3 * (B[0]-A[0]), 3 * (A[1]-B[1])], //The flipped version
-		[3 * (C[0]-B[0]), 3 * (B[1]-C[1])],
-		[3 * (D[0]-C[0]), 3 * (C[1]-D[1])]
-
-		// [3 * (B[0]-A[0]), 3 * (B[1]-A[1])], //The proper version
-		// [3 * (C[0]-B[0]), 3 * (C[1]-B[1])],
-		// [3 * (D[0]-C[0]), 3 * (D[1]-C[1])]
+		[3 * (B[0]-A[0]), 3 * (B[1]-A[1])],
+		[3 * (C[0]-B[0]), 3 * (C[1]-B[1])],
+		[3 * (D[0]-C[0]), 3 * (D[1]-C[1])]
 	];
 
 	return dpoints;
