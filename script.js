@@ -380,7 +380,7 @@ function drawPoint(ctx, x, y)
 	ctx.strokeStyle = '#000000';
 	ctx.lineWidth = 1;
 	ctx.beginPath();
-	ctx.arc(x, y, 3, 0, 2*Math.PI);
+	ctx.arc(x, y, 5, 0, 2*Math.PI);
 	ctx.fill();
 	ctx.stroke();
 }
@@ -441,7 +441,7 @@ function drawArrow(ctx, anchor, vector)
 function draw_bezier_curve(ctx, pt1, pt2, pt3, pt4, BezierIdx)
 {
 	//draw curve
-	ctx.lineWidth = 3;
+	ctx.lineWidth = 5;
 	ctx.strokeStyle = Colors[BezierIdx % Colors.length];
 	ctx.beginPath();
 	ctx.moveTo(pt1[0], pt1[1]);
@@ -450,7 +450,7 @@ function draw_bezier_curve(ctx, pt1, pt2, pt3, pt4, BezierIdx)
 
 	//draw handles
 	ctx.strokeStyle = '#000000';
-	ctx.lineWidth = 1;
+	ctx.lineWidth = 2;
 	ctx.beginPath();
 	ctx.moveTo(pt1[0], pt1[1]);
 	ctx.lineTo(pt2[0], pt2[1]);
@@ -465,7 +465,7 @@ function draw_everything_as_bezier_curve(ctx, NumSteps)
 	if (BezierPoints.length < 2) return;
 
 	//Initialize the canvas
-	ctx.lineWidth = 3;
+	ctx.lineWidth = 5;
 	ctx.strokeStyle = Colors[0];
 	ctx.beginPath();
 	ctx.moveTo(BezierPoints[0][0], BezierPoints[0][1]);
