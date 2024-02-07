@@ -23,7 +23,7 @@ body {
 
 #pagename {
 	grid-column: 1;
-	grid-row: 1 / span 2;
+	grid-row: 1;
 	text-align: center;
 }
 
@@ -67,8 +67,8 @@ body {
 
 .buttonArea {
 	display: flex;
-	justify-content: space-evenly;
-	grid-column: 2;
+	justify-content: flex-end;
+	grid-column: 1 / span 2;
 	grid-row: 2;
 }
 
@@ -97,3 +97,7 @@ input:focus + label {
 	background: #EEE;
 }
 
+.buttonArea .clear-canvas{
+	margin-left: 2em;
+	margin-right: 2em;
+}

@@ -1,7 +1,52 @@
-const BezierPoints = [];
+const BezierPoints = 
+[
+    [
+        600,
+        100
+    ],
+    [
+        400,
+        100
+    ],
+    [
+        350,
+        150
+    ],
+    [
+        350,
+        200
+    ],
+    [
+        350,
+        250
+    ],
+    [
+        550,
+        350
+    ],
+    [
+        550,
+        400
+    ],
+    [
+        550,
+        450
+    ],
+    [
+        500,
+        500
+    ],
+    [
+        300,
+        500
+    ]
+];
+
+
+// const BezierPoints = [];
 const Colors = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00'];
 
-const modes = ["BROKEN", "ALIGN", "MIRROR", "G2", "C2"];
+const modes = ["BROKEN", "ALIGN", "MIRROR", "G2", "C2", "CURVE"];
 var MODE = modes[0];
 
 var MovingPointIdx = -1;
@@ -165,11 +210,11 @@ function canvasMouseMove()
 
 	if (MovingPointIdx >= 0 && MovingPointIdx < BezierPoints.length)
 	{
-	  if (MODE == modes[0] || MODE == modes[1] || MODE == modes[2])
+	  if (MODE == modes[0] || MODE == modes[1] || MODE == modes[2] || MODE == modes[5])
 	  {
 		  //We can always move the first and last 2 points,
-		  // or if we are in the free mode ("Broken")
-		  if (MovingPointIdx <= 1 || MovingPointIdx >= BezierPoints.length - 2 || MODE == modes[0])
+		  // or if we are in the free modes ("Broken", "Curve")
+		  if (MovingPointIdx <= 1 || MovingPointIdx >= BezierPoints.length - 2 || MODE == modes[0] || MODE == modes[5])
 		  {
 		  	BezierPoints[MovingPointIdx] = [x, y];
 		  }
@@ -320,8 +365,11 @@ function ContinuityClick(event)
 {
 	var SelectedMode = event.target.value;
 	MODE = modes[SelectedMode];
-	CalcContinuityAll();
-	UpdateSamplePoints();
+	if (SelectedMode < 5)
+	{
+		CalcContinuityAll();
+		UpdateSamplePoints();
+	}
 	UpdateCanvas();
 	UpdatePlots();
 }
@@ -329,8 +377,11 @@ function ContinuityClick(event)
 function drawPoint(ctx, x, y)
 {
 	//draw a point onto the canvas
+	ctx.strokeStyle = '#000000';
+	ctx.lineWidth = 1;
 	ctx.beginPath();
 	ctx.arc(x, y, 3, 0, 2*Math.PI);
+	ctx.fill();
 	ctx.stroke();
 }
 
@@ -369,6 +420,8 @@ function drawArrow(ctx, anchor, vector)
   const p6 = [0 - HeadWidth / 2, Length - HeadLength];
   const p7 = [0, Length];
 
+	ctx.strokeStyle = '#000000';
+	ctx.lineWidth = 1;
   ctx.moveTo(p1[0], p1[1]);
   ctx.beginPath();
   ctx.lineTo(p3[0], p3[1]);
@@ -406,6 +459,62 @@ function draw_bezier_curve(ctx, pt1, pt2, pt3, pt4, BezierIdx)
 	ctx.stroke();
 }
 
+function draw_everything_as_bezier_curve(ctx, NumSteps)
+{
+	//Safety
+	if (BezierPoints.length < 2) return;
+
+	//Initialize the canvas
+	ctx.lineWidth = 3;
+	ctx.strokeStyle = Colors[0];
+	ctx.beginPath();
+	ctx.moveTo(BezierPoints[0][0], BezierPoints[0][1]);
+
+	//Create a working copy of the points. We will overwrite this in every iteration.
+	//The points in P represent a column of the de Casteljau scheme.
+	//Only the first few points are valid, depending on the iteration.
+	const P = [];
+	P.length = BezierPoints.length;
+
+	//Initialize the de Casteljau algorithm
+	// - degree of the curve
+	const n = P.length - 1;
+	//Other variables:
+	// r - iteration counter
+	// i - index of point in P (column of de Casteljau scheme).
+	// t - curve parameter between [0, 1].
+
+	// for (var j=0;j<n+1;j++) {P[j] = [BezierPoints[j][0], BezierPoints[j][1]];}
+	// console.log(BezierPoints);
+	// console.log(P);
+
+	for(var a=0;a<NumSteps;a++)
+	{
+		//Get the next sample point on the curve at the location of t.
+		const t = a / (NumSteps - 1);
+
+		//Init the de Casteljau scheme with the Bezier points.
+		for (var j=0;j<n+1;j++) {P[j] = [BezierPoints[j][0], BezierPoints[j][1]];}
+
+		//Execute the actual de Casteljau algorithm
+		for(var r=0;r<n;r++)
+		{
+			for(var i=0;i<n-r;i++)
+			{
+				//Linear interpolation between neighboring points in P
+				P[i][0] = (1-t) * P[i][0] + t * P[i+1][0];
+				P[i][1] = (1-t) * P[i][1] + t * P[i+1][1];
+			}
+		}
+
+		//Tell the Canvas to draw a straight line to the next point on the Bezier curve.
+		ctx.lineTo(P[0][0], P[0][1]);
+	}
+
+	//Execute all drawing commands from above, closing the path.
+	ctx.stroke();
+}
+
 
 function UpdateCanvas()
 {
@@ -418,7 +527,7 @@ function UpdateCanvas()
 	{
 		drawPoint(ctx, BezierPoints[i][0], BezierPoints[i][1]);
 
-		if (i >= 3 && i % 3 == 0)
+		if (i >= 3 && i % 3 == 0 && MODE != modes[5])
 		{
 			//        i = 3, 6, 9, 12, 15, ...
 			//BezierIdx = 0, 1, 2,  3,  4, ...
@@ -428,6 +537,12 @@ function UpdateCanvas()
 														 BezierPoints[i-1], BezierPoints[i],
 														 BezierIdx);
 		}
+	}
+
+	//Do not draw a spline. Draw the Bézier curve with its high polynomial degree.
+	if (MODE == modes[5])
+	{
+		draw_everything_as_bezier_curve(ctx, 100);
 	}
 
 	// for (SP of SamplePoints)
@@ -482,9 +597,12 @@ function UpdateSamplePoints()
 
 function UpdatePlots()
 {
-	[Velocity, Acceleration] = ComputeDerivativesFlipped();
-	DrawVelocity(Velocity);
-	DrawAcceleration(Acceleration);
+	if (MODE != modes[5])
+	{
+		[Velocity, Acceleration] = ComputeDerivativesFlipped();
+		DrawVelocity(Velocity);
+		DrawAcceleration(Acceleration);
+	}
 }
 
 function ComputeDerivativesFlipped()
