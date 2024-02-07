@@ -1,49 +1,4 @@
-const BezierPoints = 
-[
-    [
-        600,
-        100
-    ],
-    [
-        400,
-        100
-    ],
-    [
-        350,
-        150
-    ],
-    [
-        350,
-        200
-    ],
-    [
-        350,
-        250
-    ],
-    [
-        550,
-        350
-    ],
-    [
-        550,
-        400
-    ],
-    [
-        550,
-        450
-    ],
-    [
-        500,
-        500
-    ],
-    [
-        300,
-        500
-    ]
-];
-
-
-// const BezierPoints = [];
+const BezierPoints = [];
 const Colors = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00'];
 
 const modes = ["BROKEN", "ALIGN", "MIRROR", "G2", "C2", "CURVE"];
@@ -114,6 +69,9 @@ const accelerationLayout = {
 
 function init_view()
 {
+	//Use this if you want to start with some nice points.
+	// SetExamplePoints();
+
   // Resize canvas when window is resized.
   window.addEventListener('resize', resizeCanvas);
   // Set canvas size for the first time.
@@ -908,3 +866,24 @@ function GetSecondDerivative(dpoints)
 	return ddpoints;
 }
 
+const ExamplePoints = [
+    [600, 100],
+    [400, 100],
+    [350, 150],
+    [350, 200],
+    [350, 250],
+    [550, 350],
+    [550, 400],
+    [550, 450],
+    [500, 500],
+    [300, 500]
+];
+
+function SetExamplePoints()
+{
+	BezierPoints.length = 0;
+	for(P of ExamplePoints)
+	{
+		BezierPoints.push([P[0], P[1]]);
+	}
+}
