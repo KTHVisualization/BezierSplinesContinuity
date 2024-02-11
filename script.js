@@ -698,23 +698,26 @@ function DrawAcceleration(Acceleration)
     accelerationPoints.push(AccData);
   }
 
-  var AccelerationVector =
-  {
-    x: [0, NearestSampleAcceleration[0]],
-    y: [0, -NearestSampleAcceleration[1]],
-    mode: "lines+markers",
-    line:
-    {
-    	width: 3,
-    	dash: 'solid'
-    },
-    marker:
-    {
-    	color: 'rgba(0, 0, 0, 1)',
-      size: [3, 9],
-    }
-  };
-  accelerationPoints.push(AccelerationVector);
+	if (NearestSamplePIdx >= 0)
+	{
+	  var AccelerationVector =
+	  {
+	    x: [0, NearestSampleAcceleration[0]],
+	    y: [0, -NearestSampleAcceleration[1]],
+	    mode: "lines+markers",
+	    line:
+	    {
+	    	width: 3,
+	    	dash: 'solid'
+	    },
+	    marker:
+	    {
+	    	color: 'rgba(0, 0, 0, 1)',
+	      size: [3, 9],
+	    }
+	  };
+	  accelerationPoints.push(AccelerationVector);
+	}
 
   Plotly.react("accelerationPlot", accelerationPoints, accelerationLayout, plotConfig);
 }
